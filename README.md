@@ -5,6 +5,9 @@ A robust Node.js backend for real-time messaging using Express and Socket.io. De
 ## Features
 
 - **Real-time Messaging**: Powered by Socket.io.
+- **Image Support**: Send and receive images via base64 strings.
+- **Message Recall**: Users can recall their messages within a 2-minute window.
+- **Enhanced User Profiles**: Support for nicknames and custom avatars.
 - **CORS Support**: Configured for cross-origin requests.
 - **Room Support**: Users can join specific rooms and message within them.
 - **CI/CD Ready**: Includes a GitHub Action workflow.
@@ -41,14 +44,21 @@ set PORT=4000 && npm start
 
 ## Socket.io Events
 
-- **Connection**: Listen for `connection`.
-- **Join Room**: Emit `join_room` with the room name.
-- **Send Message**: Emit `send_message` with an object containing `room`, `user`, and `message`.
-- **Receive Message**: Listen for `receive_message` to get message updates.
+### Client to Server
+- **set_user_info**: Emit with `{ nickname, avatar }` to set user details.
+- **join_room**: Emit with the room name (string).
+- **send_message**: Emit with `{ room, message, image }`.
+- **message_recall**: Emit with `{ msgId }` to recall a previously sent message.
+
+### Server to Client
+- **receive_message**: Listen for `{ id, room, user, avatar, message, image, timestamp }`.
+- **message_recalled**: Listen for `{ msgId }` to remove a message from the UI.
+- **error**: Listen for error messages.
 
 ## Project Structure
 
 - `server.js`: Main entry point for the Express and Socket.io server.
 - `package.json`: Project configuration and dependencies.
 - `.github/workflows/`: CI/CD configuration.
-- `README.md`: Setup and usage instructions.
+- `README.md`: English documentation.
+- `README_CN.md`: Chinese documentation.
