@@ -3,79 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aura Chat | Minimalist Experience</title>
+    <title>Aura Chat V2 - Secure & Private</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body>
     <div id="login-overlay" class="overlay">
         <div class="glass-card login-card">
-            <h1>Welcome to Aura</h1>
-            <p>Enter a nickname to join the conversation</p>
-            <input type="text" id="nickname-input" placeholder="Your nickname..." maxlength="15">
-            <button id="join-btn">Start Chatting</button>
+            <div class="logo">
+                <div class="logo-icon">A</div>
+                <h1>Aura Chat V2</h1>
+            </div>
+            <div id="auth-forms">
+                <div id="login-form">
+                    <input type="text" id="username-input" placeholder="Username" autocomplete="off">
+                    <input type="password" id="password-input" placeholder="Password">
+                    <button id="login-btn" class="primary-btn">Login</button>
+                    <p class="toggle-text">Don't have an account? <span id="show-register">Register</span></p>
+                </div>
+                <div id="register-form" class="hidden">
+                    <input type="text" id="reg-username-input" placeholder="Choose Username" autocomplete="off">
+                    <input type="password" id="reg-password-input" placeholder="Choose Password">
+                    <button id="register-btn" class="primary-btn">Register</button>
+                    <p class="toggle-text">Already have an account? <span id="show-login">Login</span></p>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="app-container">
-        <aside class="sidebar glass">
+    <div class="app-container hidden">
+        <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="logo">Aura</div>
-            </div>
-            <div class="rooms-list">
-                <div class="section-title">Rooms</div>
-                <div class="room-item active" data-room="General"># general</div>
-                <div class="room-item" data-room="Tech"># tech</div>
-                <div class="room-item" data-room="Design"># design</div>
-                <div class="room-item" data-room="Lounge"># lounge</div>
-            </div>
-            <div class="user-profile">
-                <div class="avatar-small" id="user-avatar">?</div>
-                <div class="user-info">
-                    <span id="display-name">Anonymous</span>
-                    <span class="status-indicator">Online</span>
+                <div class="user-profile">
+                    <div id="user-avatar" class="avatar">?</div>
+                    <span id="display-name">Username</span>
                 </div>
+                <button id="show-qr-btn" title="Show My Add Key">🔑</button>
             </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h3>Rooms</h3>
+                    <div class="room-list">
+                        <div class="room-item active" data-room="General"># general</div>
+                        <div class="room-item" data-room="Lounge"># lounge</div>
+                        <div class="room-item" data-room="Tech"># tech</div>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="section-header">
+                        <h3>Friends</h3>
+                        <button id="add-friend-btn" title="Add Friend">+</button>
+                    </div>
+                    <div id="friends-list" class="room-list">
+                        <!-- Friends will appear here -->
+                    </div>
+                </div>
+            </nav>
         </aside>
 
         <main class="chat-area">
-            <header class="chat-header glass">
-                <div class="room-info">
-                    <h2 id="current-room-name"># general</h2>
-                    <span class="room-status">Streaming real-time</span>
+            <header class="chat-header">
+                <div class="header-info">
+                    <h2 id="current-chat-name"># general</h2>
+                    <span id="encryption-status" title="End-to-End Encrypted">🔒 E2EE</span>
+                </div>
+                <div class="header-actions">
+                    <!-- Future actions -->
                 </div>
             </header>
 
-            <div class="messages-container" id="messages-container">
-                <!-- Messages will appear here -->
+            <div id="messages-container" class="messages-container">
                 <div class="welcome-message">
-                    <h3>Beginning of the conversation</h3>
-                    <p>This is the very start of the #general channel.</p>
+                    <h3>Welcome to Aura Chat V2</h3>
+                    <p>Your messages are secured with AES encryption.</p>
                 </div>
             </div>
 
-            <footer class="input-area glass">
-                <div class="input-wrapper">
-                    <label for="image-upload" class="icon-btn" title="Send image">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                    </label>
-                    <input type="file" id="image-upload" accept="image/*" style="display: none;">
-                    
-                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                    
-                    <button id="send-btn" class="icon-btn primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </button>
-                </div>
-                <div id="image-preview" class="image-preview-bar" style="display: none;">
-                    <img src="" alt="Preview" id="preview-img">
+            <div id="image-preview" class="image-preview-overlay">
+                <div class="preview-content">
+                    <img id="preview-img" src="" alt="Preview">
                     <button id="cancel-image">×</button>
+                </div>
+            </div>
+
+            <footer class="chat-footer">
+                <div class="input-container">
+                    <label for="image-upload" class="attach-btn" title="Upload Image">
+                        📎
+                        <input type="file" id="image-upload" accept="image/*" hidden>
+                    </label>
+                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+                    <button id="send-btn" class="send-btn">Send</button>
                 </div>
             </footer>
         </main>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-modal" class="modal hidden">
+        <div class="glass-card modal-content">
+            <h3>Your Add Key</h3>
+            <p>Share this QR code with a friend to connect securely.</p>
+            <div id="qrcode-container"></div>
+            <p id="temp-key-display" class="key-text"></p>
+            <button class="close-modal">Close</button>
+        </div>
+    </div>
+
+    <!-- Add Friend Modal -->
+    <div id="add-friend-modal" class="modal hidden">
+        <div class="glass-card modal-content">
+            <h3>Add Friend</h3>
+            <input type="text" id="friend-username-input" placeholder="Friend's Username">
+            <input type="text" id="friend-key-input" placeholder="Temporary Key">
+            <button id="confirm-add-friend" class="primary-btn">Add Friend</button>
+            <button class="close-modal">Cancel</button>
+        </div>
     </div>
 
     <div id="toast-container"></div>

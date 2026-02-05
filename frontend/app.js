@@ -1,248 +1,385 @@
-// Aura Chat Client
+// Aura Chat V2 - Client Logic
 document.addEventListener('DOMContentLoaded', () => {
     // Configuration
-    const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:3000' 
-        : `https://${window.location.hostname.replace('-8080', '-3000')}`; // Heuristic for codespaces
-
+    const API_URL = window.location.origin.replace(':8080', ':3000').replace(':5173', ':3000');
+    
     // DOM Elements
     const loginOverlay = document.getElementById('login-overlay');
-    const nicknameInput = document.getElementById('nickname-input');
-    const joinBtn = document.getElementById('join-btn');
+    const authForms = document.getElementById('auth-forms');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
     const appContainer = document.querySelector('.app-container');
+    
+    // Auth Inputs
+    const usernameInput = document.getElementById('username-input');
+    const passwordInput = document.getElementById('password-input');
+    const regUsernameInput = document.getElementById('reg-username-input');
+    const regPasswordInput = document.getElementById('reg-password-input');
+    
+    // Chat Elements
     const messagesContainer = document.getElementById('messages-container');
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
     const roomItems = document.querySelectorAll('.room-item');
-    const currentRoomName = document.getElementById('current-room-name');
+    const currentChatName = document.getElementById('current-chat-name');
     const displayName = document.getElementById('display-name');
     const userAvatar = document.getElementById('user-avatar');
-    const imageUpload = document.getElementById('image-upload');
-    const imagePreview = document.getElementById('image-preview');
-    const previewImg = document.getElementById('preview-img');
-    const cancelImageBtn = document.getElementById('cancel-image');
-    const toastContainer = document.getElementById('toast-container');
-
+    const friendsList = document.getElementById('friends-list');
+    
+    // Modals
+    const qrModal = document.getElementById('qr-modal');
+    const addFriendModal = document.getElementById('add-friend-modal');
+    const qrcodeContainer = document.getElementById('qrcode-container');
+    const tempKeyDisplay = document.getElementById('temp-key-display');
+    
     // State
     let socket = null;
-    let currentUser = {
-        nickname: '',
-        room: 'General',
-        id: ''
+    let currentUser = null;
+    let currentRoom = 'General';
+    let currentDM = null;
+    let friends = [];
+    let encryptionKeys = {}; // username -> CryptoKey
+    
+    // --- ENCRYPTION HELPERS ---
+
+    async function deriveKey(sharedSecret) {
+        const encoder = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(sharedSecret),
+            'PBKDF2',
+            false,
+            ['deriveKey']
+        );
+        return await crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: encoder.encode('aura-v2-salt'),
+                iterations: 100000,
+                hash: 'SHA-256'
+            },
+            keyMaterial,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt']
+        );
+    }
+
+    async function encryptMessage(text, key) {
+        const encoder = new TextEncoder();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            encoder.encode(text)
+        );
+        return {
+            cipher: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+            iv: btoa(String.fromCharCode(...iv))
+        };
+    }
+
+    async function decryptMessage(encryptedData, key) {
+        try {
+            const { cipher, iv } = encryptedData;
+            const decoder = new TextDecoder();
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: new Uint8Array(atob(iv).split('').map(c => c.charCodeAt(0))) },
+                key,
+                new Uint8Array(atob(cipher).split('').map(c => c.charCodeAt(0)))
+            );
+            return decoder.decode(decrypted);
+        } catch (e) {
+            return '[Decryption Failed]';
+        }
+    }
+
+
+    document.getElementById('show-register').onclick = () => {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
     };
-    let pendingImage = null;
 
-    // Initialization
-    nicknameInput.focus();
+    document.getElementById('show-login').onclick = () => {
+        registerForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+    };
 
-    // Event Listeners
-    joinBtn.addEventListener('click', joinChat);
-    nicknameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinChat();
-    });
+    document.getElementById('login-btn').onclick = async () => {
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        if (!username || !password) return showToast('Fill all fields');
 
-    sendBtn.addEventListener('click', sendMessage);
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-
-    roomItems.forEach(item => {
-        item.addEventListener('click', () => {
-            const room = item.getAttribute('data-room');
-            switchRoom(room);
-            
-            // UI Update
-            roomItems.forEach(ri => ri.classList.remove('active'));
-            item.classList.add('active');
-        });
-    });
-
-    imageUpload.addEventListener('change', handleImageSelect);
-    cancelImageBtn.addEventListener('click', clearImagePreview);
-
-    // Functions
-    function joinChat() {
-        const nickname = nicknameInput.value.trim();
-        if (!nickname) {
-            showToast('Please enter a nickname');
-            return;
-        }
-
-        currentUser.nickname = nickname;
-        displayName.textContent = nickname;
-        userAvatar.textContent = nickname.charAt(0).toUpperCase();
-
-        // Connect to Socket.io
-        // In local environment or codespaces, we might need to adjust the port
-        const socketOptions = {
-            transports: ['websocket', 'polling'],
-            reconnectionAttempts: 5
-        };
-
-        // Try to connect to port 3000 (backend)
-        const backendUrl = window.location.origin.replace(':8080', ':3000').replace(':5173', ':3000');
-        socket = io(backendUrl, socketOptions);
-
-        socket.on('connect', () => {
-            currentUser.id = socket.id;
-            console.log('Connected to chat server');
-            
-            socket.emit('set_user_info', { 
-                nickname: currentUser.nickname 
+        try {
+            const res = await fetch(`${API_URL}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
             });
-            
-            socket.emit('join_room', currentUser.room);
-            
-            loginOverlay.classList.add('hidden');
-            showToast(`Welcome, ${nickname}!`);
-        });
-
-        socket.on('receive_message', (data) => {
-            appendMessage(data);
-        });
-
-        socket.on('message_recalled', (data) => {
-            handleRecallUI(data.msgId);
-        });
-
-        socket.on('error', (data) => {
-            showToast(data.message);
-        });
-
-        socket.on('connect_error', (err) => {
-            console.error('Connection error:', err);
-            showToast('Failed to connect to server. Ensure backend is running.');
-        });
-    }
-
-    function switchRoom(newRoom) {
-        if (newRoom === currentUser.room) return;
-        
-        socket.emit('join_room', newRoom);
-        currentUser.room = newRoom;
-        currentRoomName.textContent = `# ${newRoom.toLowerCase()}`;
-        
-        // Clear messages for the new room view (or fetch history if backend supported it)
-        messagesContainer.innerHTML = `
-            <div class="welcome-message">
-                <h3>Beginning of #${newRoom.toLowerCase()}</h3>
-                <p>Messages in this room are real-time.</p>
-            </div>
-        `;
-    }
-
-    function handleImageSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (!file.type.startsWith('image/')) {
-            showToast('Please select an image file');
-            return;
+            const data = await res.json();
+            if (data.success) {
+                currentUser = data.user;
+                initChat();
+            } else {
+                showToast(data.error);
+            }
+        } catch (e) {
+            showToast('Server connection failed');
         }
+    };
 
-        if (file.size > 5 * 1024 * 1024) {
-            showToast('Image must be less than 5MB');
-            return;
+    document.getElementById('register-btn').onclick = async () => {
+        const username = regUsernameInput.value.trim();
+        const password = regPasswordInput.value;
+        if (!username || !password) return showToast('Fill all fields');
+
+        try {
+            const res = await fetch(`${API_URL}/api/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('Registration successful! Please login.');
+                document.getElementById('show-login').click();
+            } else {
+                showToast(data.error);
+            }
+        } catch (e) {
+            showToast('Registration failed');
         }
+    };
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            pendingImage = event.target.result;
-            previewImg.src = pendingImage;
-            imagePreview.style.display = 'flex';
-        };
-        reader.readAsDataURL(file);
+    // --- CHAT INITIALIZATION ---
+
+    function initChat() {
+        loginOverlay.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        displayName.textContent = currentUser.username;
+        userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
+
+        socket = io(API_URL);
+        
+        socket.on('connect', () => {
+            socket.emit('authenticate', { username: currentUser.username });
+            socket.emit('join_room', currentRoom);
+        });
+
+        socket.on('receive_message', async (data) => {
+            await appendMessage(data);
+        });
+
+        socket.on('room_history', async (history) => {
+            messagesContainer.innerHTML = '';
+            for (const msg of history) {
+                await appendMessage(msg);
+            }
+        });
+
+        socket.on('friends_list', (list) => {
+            friends = list;
+            renderFriends();
+        });
+
+        socket.on('friend_added', (data) => {
+            if (!friends.includes(data.username)) {
+                friends.push(data.username);
+                renderFriends();
+                showToast(`Added friend: ${data.username}`);
+            }
+        });
+
+        socket.on('friend_status', (data) => {
+            const el = document.querySelector(`[data-friend="${data.username}"]`);
+            if (el) {
+                el.style.opacity = data.status === 'online' ? '1' : '0.5';
+            }
+        });
     }
 
-    function clearImagePreview() {
-        pendingImage = null;
-        previewImg.src = '';
-        imagePreview.style.display = 'none';
-        imageUpload.value = '';
-    }
+    // --- MESSAGING ---
 
-    function sendMessage() {
+    sendBtn.onclick = sendMessage;
+    messageInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
+
+    async function sendMessage() {
         const text = messageInput.value.trim();
+        const imageFile = document.getElementById('image-upload').files[0];
         
-        if (!text && !pendingImage) return;
+        if (!text && !imageFile) return;
+
+        let payload = { text, iv: null };
+        
+        // If DM, encrypt the text
+        if (currentDM) {
+            const secret = localStorage.getItem(`secret_${currentDM}`) || 'default-secret';
+            const key = await deriveKey(secret);
+            const encrypted = await encryptMessage(text, key);
+            payload = { cipher: encrypted.cipher, iv: encrypted.iv };
+        }
 
         const messageData = {
-            room: currentUser.room,
-            user: currentUser.nickname,
-            message: text,
-            image: pendingImage
+            room: currentDM ? null : currentRoom,
+            target: currentDM,
+            type: currentDM ? 'dm' : 'group',
+            message: currentDM ? JSON.stringify(payload) : text,
+            image: null
         };
 
-        socket.emit('send_message', messageData);
-        
-        // Clear inputs
+        if (imageFile) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                messageData.image = reader.result;
+                socket.emit('send_message', messageData);
+            };
+            reader.readAsDataURL(imageFile);
+        } else {
+            socket.emit('send_message', messageData);
+        }
+
         messageInput.value = '';
-        clearImagePreview();
         messageInput.focus();
+        document.getElementById('image-upload').value = '';
     }
 
-    function appendMessage(data) {
-        const isSelf = data.senderId === socket.id;
+    async function appendMessage(data) {
+        const isSelf = data.sender === currentUser.username;
+        const isDM = data.type === 'dm';
+        
+        if (currentDM) {
+            if (!isDM || (data.sender !== currentDM && !isSelf)) return;
+        } else {
+            if (isDM || data.room !== currentRoom) return;
+        }
+
+        let displayMessage = data.message;
+        if (isDM) {
+            try {
+                const payload = JSON.parse(data.message);
+                if (payload.cipher) {
+                    const otherParty = isSelf ? currentDM : data.sender;
+                    const secret = localStorage.getItem(`secret_${otherParty}`) || 'default-secret';
+                    const key = await deriveKey(secret);
+                    displayMessage = await decryptMessage(payload, key);
+                }
+            } catch (e) {
+                console.error('Failed to parse/decrypt message', e);
+            }
+        }
+
+        const msgEl = document.createElement('div');
+        msgEl.className = `message-group ${isSelf ? 'self' : 'other'}`;
         const time = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        const messageGroup = document.createElement('div');
-        messageGroup.className = `message-group ${isSelf ? 'self' : 'other'}`;
-        messageGroup.id = `msg-${data.id}`;
-
-        let contentHtml = '';
-        if (data.image) {
-            contentHtml += `<img src="${data.image}" class="message-image" onclick="window.open('${data.image}')">`;
-        }
-        if (data.message) {
-            contentHtml += `<div class="text-content">${escapeHTML(data.message)}</div>`;
-        }
-
-        messageGroup.innerHTML = `
+        msgEl.innerHTML = `
             <div class="message-meta">
-                ${isSelf ? '' : `<span class="sender-name">${data.user}</span> • `}
+                <span class="sender-name">${data.sender}</span> • 
                 <span class="timestamp">${time}</span>
+                ${isDM ? '<span class="e2ee-tag" title="End-to-End Encrypted">🔒</span>' : ''}
             </div>
             <div class="message-bubble">
-                ${isSelf ? `<button class="recall-btn" onclick="recallMessage('${data.id}')" title="Recall message">×</button>` : ''}
                 <div class="bubble-content">
-                    ${contentHtml}
+                    ${data.image ? `<img src="${data.image}" class="message-image">` : ''}
+                    <div class="text-content">${escapeHTML(displayMessage)}</div>
                 </div>
             </div>
         `;
 
-        messagesContainer.appendChild(messageGroup);
-        scrollToBottom();
-    }
-
-    function handleRecallUI(msgId) {
-        const msgEl = document.getElementById(`msg-${msgId}`);
-        if (msgEl) {
-            const bubbleContent = msgEl.querySelector('.bubble-content');
-            bubbleContent.innerHTML = '<span class="recalled-text">Message recalled</span>';
-            const recallBtn = msgEl.querySelector('.recall-btn');
-            if (recallBtn) recallBtn.remove();
-        }
-    }
-
-    // Global function for the recall button
-    window.recallMessage = (msgId) => {
-        socket.emit('message_recall', { msgId });
-    };
-
-    function scrollToBottom() {
+        messagesContainer.appendChild(msgEl);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    function showToast(message) {
+
+    // --- NAVIGATION ---
+
+    roomItems.forEach(item => {
+        item.onclick = () => {
+            currentRoom = item.dataset.room;
+            currentDM = null;
+            currentChatName.textContent = `# ${currentRoom.toLowerCase()}`;
+            roomItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            document.querySelectorAll('.friend-item').forEach(i => i.classList.remove('active'));
+            
+            messagesContainer.innerHTML = `<div class="welcome-message"><h3># ${currentRoom}</h3></div>`;
+            socket.emit('join_room', currentRoom);
+        };
+    });
+
+    function renderFriends() {
+        friendsList.innerHTML = '';
+        friends.forEach(friend => {
+            const el = document.createElement('div');
+            el.className = 'room-item friend-item';
+            el.dataset.friend = friend;
+            el.innerHTML = `👤 ${friend}`;
+            el.onclick = () => {
+                currentDM = friend;
+                currentRoom = null;
+                currentChatName.textContent = `@ ${friend}`;
+                roomItems.forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.friend-item').forEach(i => i.classList.remove('active'));
+                el.classList.add('active');
+                
+                messagesContainer.innerHTML = `<div class="welcome-message"><h3>Chat with ${friend}</h3><p>Messages are E2EE encrypted.</p></div>`;
+                // Load DM history (simplified for now: just clear and wait for new)
+            };
+            friendsList.appendChild(el);
+        });
+    }
+
+    // --- SOCIAL & QR ---
+
+    document.getElementById('show-qr-btn').onclick = () => {
+        const tempKey = Math.random().toString(36).substring(2, 10).toUpperCase();
+        const qrData = JSON.stringify({ u: currentUser.username, k: tempKey });
+        
+        qrcodeContainer.innerHTML = '';
+        new QRCode(qrcodeContainer, {
+            text: qrData,
+            width: 200,
+            height: 200
+        });
+        
+        tempKeyDisplay.textContent = `Username: ${currentUser.username} | Key: ${tempKey}`;
+        qrModal.classList.remove('hidden');
+    };
+
+    document.getElementById('add-friend-btn').onclick = () => {
+        addFriendModal.classList.remove('hidden');
+    };
+
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.onclick = () => {
+            qrModal.classList.add('hidden');
+            addFriendModal.classList.add('hidden');
+        };
+    });
+
+    document.getElementById('confirm-add-friend').onclick = () => {
+        const to = document.getElementById('friend-username-input').value.trim();
+        const tempKey = document.getElementById('friend-key-input').value.trim();
+        
+        if (to && tempKey) {
+            localStorage.setItem(`secret_${to}`, tempKey);
+            socket.emit('add_friend', { from: currentUser.username, to, tempKey });
+            addFriendModal.classList.add('hidden');
+        }
+    };
+
+
+    // --- UTILS ---
+
+    function showToast(msg) {
+        const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = 'toast';
-        toast.textContent = message;
-        toastContainer.appendChild(toast);
-        
+        toast.textContent = msg;
+        container.appendChild(toast);
         setTimeout(() => {
             toast.style.opacity = '0';
-            toast.style.transform = 'translateY(20px)';
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => toast.remove(), 500);
         }, 3000);
     }
 

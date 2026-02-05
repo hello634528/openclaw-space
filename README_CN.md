@@ -1,64 +1,46 @@
-# 聊天后端 (Chat Backend)
+# Aura Chat V2 - 极简加密聊天室
 
-一个基于 Node.js 的强大实时消息后端，使用 Express 和 Socket.io 构建。旨在与 Windows 兼容且易于设置。
+Aura Chat V2 是一个注重隐私、安全且易于在 Windows 环境下部署的即时通讯系统。
 
-## 功能特性
+## V2 新特性
 
-- **实时消息**：由 Socket.io 驱动。
-- **图片支持**：支持通过 base64 字符串发送和接收图片。
-- **消息撤回**：用户可以在 2 分钟内撤回已发送的消息。
-- **增强型用户资料**：支持设置昵称和自定义头像。
-- **CORS 支持**：已配置跨域请求，方便前后端分离开发。
-- **房间支持**：用户可以加入特定房间并在其中发送消息。
-- **CI/CD 就绪**：包含 GitHub Action 工作流配置。
+1.  **认证与安全 (Auth & Security)**:
+    *   **注册与登录**: 使用 `bcrypt` 进行密码哈希处理，确保账号安全。
+    *   **端到端加密 (E2EE)**: 私信（DM）采用 AES-GCM 256 位加密。消息在发送前在客户端加密，只有接收者可以解密，服务器仅传输加密后的密文。
+2.  **持久化存储 (Persistence)**:
+    *   所有聊天记录、用户信息和好友关系均持久化存储在服务器根目录下的 `data/*.json` 文件中，无需配置复杂的数据库，完美兼容 Windows 文件系统。
+3.  **通讯模式 (Communication Modes)**:
+    *   **公共房间**: 支持多个公共聊天室（#general, #lounge 等）。
+    *   **私人消息 (DM)**: 支持一对一加密私信。
+4.  **社交功能 (Social Features)**:
+    *   **好友系统**: 通过“临时密钥”和“二维码”添加好友。
+    *   **二维码生成**: 可以在应用内生成包含用户名和临时密钥的二维码，方便线下或跨端添加。
+5.  **前端升级 (Frontend Update)**:
+    *   **玻璃拟态设计 (Glassmorphism)**: 采用现代、高级的透明磨砂质感界面。
+    *   **响应式布局**: 适配不同尺寸的屏幕。
+6.  **Windows 兼容性**:
+    *   纯 Node.js 实现，无原生依赖（使用 `bcryptjs`），在 Windows 上只需 `npm install` 即可运行。
 
-## 前置条件
+## 快速开始
 
-- [Node.js](https://nodejs.org/) (建议 v18 或更高版本)
-- [npm](https://www.npmjs.com/) (随 Node.js 一起安装)
+### 1. 安装依赖
+```bash
+npm install
+```
 
-## 安装指南 (Windows)
-
-1. **克隆或下载**：确保项目文件位于文件夹中（例如 `C:\projects\chat-backend`）。
-2. **打开终端**：打开命令提示符 (cmd) 或 PowerShell。
-3. **导航至项目目录**：
-   ```cmd
-   cd path\to\projects\chat-backend
-   ```
-4. **安装依赖**：
-   ```cmd
-   npm install
-   ```
-
-## 运行服务器
-
-以生产模式启动服务器：
-```cmd
+### 2. 启动服务器
+```bash
 npm start
 ```
 
-服务器默认将在 `3000` 端口启动。您可以通过设置 `PORT` 环境变量来更改端口：
-```cmd
-set PORT=4000 && npm start
-```
+### 3. 访问应用
+打开浏览器访问 `http://localhost:3000` (或你设置的端口)。
 
-## Socket.io 事件
+## 安全说明
 
-### 客户端到服务器 (Client to Server)
-- **set_user_info**: 发送 `{ nickname, avatar }` 来设置用户信息。
-- **join_room**: 发送房间名称 (字符串)。
-- **send_message**: 发送 `{ room, message, image }`。
-- **message_recall**: 发送 `{ msgId }` 来撤回之前发送的消息。
+*   **E2EE 密钥管理**: 在此版本中，用于加密私信的密钥会在添加好友时通过临时密钥生成，并存储在浏览器的 `localStorage` 中。
+*   **隐私**: 服务器不会存储私信的明文内容。
 
-### 服务器到客户端 (Server to Client)
-- **receive_message**: 监听并接收 `{ id, room, user, avatar, message, image, timestamp }`。
-- **message_recalled**: 监听 `{ msgId }` 以从 UI 中移除已撤回的消息。
-- **error**: 监听错误消息。
+## 开发者
 
-## 项目结构
-
-- `server.js`: Express 和 Socket.io 服务器的主入口。
-- `package.json`: 项目配置和依赖管理。
-- `.github/workflows/`: CI/CD 配置。
-- `README.md`: 英文文档。
-- `README_CN.md`: 中文文档。
+由 Aura 团队开发，旨在提供最简单、最安全的本地化通讯方案。
