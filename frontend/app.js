@@ -1,5 +1,60 @@
 // Aura Chat V2 - Client Logic
 document.addEventListener('DOMContentLoaded', () => {
+    // Internationalization (i18n)
+    let currentLang = localStorage.getItem('aura-lang') || 'en';
+
+    function setLanguage(lang) {
+        currentLang = lang;
+        localStorage.setItem('aura-lang', lang);
+        
+        // Update all elements with data-i18n
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (translations[lang][key]) {
+                el.textContent = translations[lang][key];
+            }
+        });
+
+        // Update all placeholders
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (translations[lang][key]) {
+                el.placeholder = translations[lang][key];
+            }
+        });
+
+        // Update all titles
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            if (translations[lang][key]) {
+                el.title = translations[lang][key];
+            }
+        });
+    }
+
+    function t(key, ...args) {
+        let str = (translations[currentLang] && translations[currentLang][key]) || key;
+        args.forEach(arg => {
+            str = str.replace('%s', arg);
+        });
+        return str;
+    }
+
+    // Toggle language
+    function toggleLanguage() {
+        setLanguage(currentLang === 'en' ? 'zh' : 'en');
+        // Update room names in UI if they are translated
+        if (currentUser) {
+            updateRoomDisplay();
+        }
+    }
+
+    document.getElementById('lang-toggle-login').onclick = toggleLanguage;
+    document.getElementById('lang-toggle-app').onclick = toggleLanguage;
+
+    // Initial language setup
+    setLanguage(currentLang);
+
     // Configuration
     const API_URL = window.location.origin.replace(':8080', ':3000').replace(':5173', ':3000');
     
@@ -108,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-btn').onclick = async () => {
         const username = usernameInput.value.trim();
         const password = passwordInput.value;
-        if (!username || !password) return showToast('Fill all fields');
+        if (!username || !password) return showToast(t('fill_fields'));
 
         try {
             const res = await fetch(`${API_URL}/api/login`, {
@@ -124,14 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast(data.error);
             }
         } catch (e) {
-            showToast('Server connection failed');
+            showToast(t('server_fail'));
         }
     };
 
     document.getElementById('register-btn').onclick = async () => {
         const username = regUsernameInput.value.trim();
         const password = regPasswordInput.value;
-        if (!username || !password) return showToast('Fill all fields');
+        if (!username || !password) return showToast(t('fill_fields'));
 
         try {
             const res = await fetch(`${API_URL}/api/register`, {
@@ -141,13 +196,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (data.success) {
-                showToast('Registration successful! Please login.');
+                showToast(t('reg_success'));
                 document.getElementById('show-login').click();
             } else {
                 showToast(data.error);
             }
         } catch (e) {
-            showToast('Registration failed');
+            showToast(t('reg_fail'));
         }
     };
 
@@ -186,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!friends.includes(data.username)) {
                 friends.push(data.username);
                 renderFriends();
-                showToast(`Added friend: ${data.username}`);
+                showToast(`${t('added_friend')} ${data.username}`);
             }
         });
 
@@ -293,16 +348,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NAVIGATION ---
 
+    function updateRoomDisplay() {
+        if (currentRoom) {
+            const roomKey = currentRoom.toLowerCase();
+            currentChatName.textContent = `# ${t(roomKey)}`;
+        } else if (currentDM) {
+            currentChatName.textContent = `@ ${currentDM}`;
+        }
+    }
+
     roomItems.forEach(item => {
         item.onclick = () => {
             currentRoom = item.dataset.room;
             currentDM = null;
-            currentChatName.textContent = `# ${currentRoom.toLowerCase()}`;
+            updateRoomDisplay();
             roomItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             document.querySelectorAll('.friend-item').forEach(i => i.classList.remove('active'));
             
-            messagesContainer.innerHTML = `<div class="welcome-message"><h3># ${currentRoom}</h3></div>`;
+            messagesContainer.innerHTML = `<div class="welcome-message"><h3># ${t(currentRoom.toLowerCase())}</h3></div>`;
             socket.emit('join_room', currentRoom);
         };
     });
@@ -317,13 +381,12 @@ document.addEventListener('DOMContentLoaded', () => {
             el.onclick = () => {
                 currentDM = friend;
                 currentRoom = null;
-                currentChatName.textContent = `@ ${friend}`;
+                updateRoomDisplay();
                 roomItems.forEach(i => i.classList.remove('active'));
                 document.querySelectorAll('.friend-item').forEach(i => i.classList.remove('active'));
                 el.classList.add('active');
                 
-                messagesContainer.innerHTML = `<div class="welcome-message"><h3>Chat with ${friend}</h3><p>Messages are E2EE encrypted.</p></div>`;
-                // Load DM history (simplified for now: just clear and wait for new)
+                messagesContainer.innerHTML = `<div class="welcome-message"><h3>${t('chat_with', friend)}</h3><p>${t('e2ee_desc')}</p></div>`;
             };
             friendsList.appendChild(el);
         });
@@ -342,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             height: 200
         });
         
-        tempKeyDisplay.textContent = `Username: ${currentUser.username} | Key: ${tempKey}`;
+        tempKeyDisplay.textContent = `${t('username')}: ${currentUser.username} | ${t('temp_key')}: ${tempKey}`;
         qrModal.classList.remove('hidden');
     };
 

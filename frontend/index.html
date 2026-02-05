@@ -8,26 +8,30 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="translations.js"></script>
 </head>
 <body>
     <div id="login-overlay" class="overlay">
         <div class="glass-card login-card">
+            <div class="language-selector">
+                <button id="lang-toggle-login" class="lang-btn">EN/中</button>
+            </div>
             <div class="logo">
                 <div class="logo-icon">A</div>
-                <h1>Aura Chat V2</h1>
+                <h1 data-i18n="title">Aura Chat V2</h1>
             </div>
             <div id="auth-forms">
                 <div id="login-form">
-                    <input type="text" id="username-input" placeholder="Username" autocomplete="off">
-                    <input type="password" id="password-input" placeholder="Password">
-                    <button id="login-btn" class="primary-btn">Login</button>
-                    <p class="toggle-text">Don't have an account? <span id="show-register">Register</span></p>
+                    <input type="text" id="username-input" data-i18n-placeholder="username" placeholder="Username" autocomplete="off">
+                    <input type="password" id="password-input" data-i18n-placeholder="password" placeholder="Password">
+                    <button id="login-btn" class="primary-btn" data-i18n="login">Login</button>
+                    <p class="toggle-text"><span data-i18n="no_account">Don't have an account?</span> <span id="show-register" data-i18n="register">Register</span></p>
                 </div>
                 <div id="register-form" class="hidden">
-                    <input type="text" id="reg-username-input" placeholder="Choose Username" autocomplete="off">
-                    <input type="password" id="reg-password-input" placeholder="Choose Password">
-                    <button id="register-btn" class="primary-btn">Register</button>
-                    <p class="toggle-text">Already have an account? <span id="show-login">Login</span></p>
+                    <input type="text" id="reg-username-input" data-i18n-placeholder="choose_username" placeholder="Choose Username" autocomplete="off">
+                    <input type="password" id="reg-password-input" data-i18n-placeholder="choose_password" placeholder="Choose Password">
+                    <button id="register-btn" class="primary-btn" data-i18n="register">Register</button>
+                    <p class="toggle-text"><span data-i18n="have_account">Already have an account?</span> <span id="show-login" data-i18n="login">Login</span></p>
                 </div>
             </div>
         </div>
@@ -40,23 +44,26 @@
                     <div id="user-avatar" class="avatar">?</div>
                     <span id="display-name">Username</span>
                 </div>
-                <button id="show-qr-btn" title="Show My Add Key">🔑</button>
+                <div class="header-actions">
+                    <button id="lang-toggle-app" class="lang-btn" title="Switch Language">EN/中</button>
+                    <button id="show-qr-btn" data-i18n-title="show_key" title="Show My Add Key">🔑</button>
+                </div>
             </div>
             
             <nav class="sidebar-nav">
                 <div class="nav-section">
-                    <h3>Rooms</h3>
+                    <h3 data-i18n="rooms">Rooms</h3>
                     <div class="room-list">
-                        <div class="room-item active" data-room="General"># general</div>
-                        <div class="room-item" data-room="Lounge"># lounge</div>
-                        <div class="room-item" data-room="Tech"># tech</div>
+                        <div class="room-item active" data-room="General"># <span data-i18n="general">general</span></div>
+                        <div class="room-item" data-room="Lounge"># <span data-i18n="lounge">lounge</span></div>
+                        <div class="room-item" data-room="Tech"># <span data-i18n="tech">tech</span></div>
                     </div>
                 </div>
                 
                 <div class="nav-section">
                     <div class="section-header">
-                        <h3>Friends</h3>
-                        <button id="add-friend-btn" title="Add Friend">+</button>
+                        <h3 data-i18n="friends">Friends</h3>
+                        <button id="add-friend-btn" data-i18n-title="add_friend" title="Add Friend">+</button>
                     </div>
                     <div id="friends-list" class="room-list">
                         <!-- Friends will appear here -->
@@ -69,7 +76,7 @@
             <header class="chat-header">
                 <div class="header-info">
                     <h2 id="current-chat-name"># general</h2>
-                    <span id="encryption-status" title="End-to-End Encrypted">🔒 E2EE</span>
+                    <span id="encryption-status" data-i18n-title="e2ee_desc" title="End-to-End Encrypted">🔒 <span data-i18n="e2ee">E2EE</span></span>
                 </div>
                 <div class="header-actions">
                     <!-- Future actions -->
@@ -78,8 +85,8 @@
 
             <div id="messages-container" class="messages-container">
                 <div class="welcome-message">
-                    <h3>Welcome to Aura Chat V2</h3>
-                    <p>Your messages are secured with AES encryption.</p>
+                    <h3 data-i18n="welcome_title">Welcome to Aura Chat V2</h3>
+                    <p data-i18n="welcome_desc">Your messages are secured with AES encryption.</p>
                 </div>
             </div>
 
@@ -92,12 +99,12 @@
 
             <footer class="chat-footer">
                 <div class="input-container">
-                    <label for="image-upload" class="attach-btn" title="Upload Image">
+                    <label for="image-upload" class="attach-btn" data-i18n-title="upload_image" title="Upload Image">
                         📎
                         <input type="file" id="image-upload" accept="image/*" hidden>
                     </label>
-                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                    <button id="send-btn" class="send-btn">Send</button>
+                    <input type="text" id="message-input" data-i18n-placeholder="type_message" placeholder="Type a message..." autocomplete="off">
+                    <button id="send-btn" class="send-btn" data-i18n="send">Send</button>
                 </div>
             </footer>
         </main>
@@ -106,22 +113,22 @@
     <!-- QR Code Modal -->
     <div id="qr-modal" class="modal hidden">
         <div class="glass-card modal-content">
-            <h3>Your Add Key</h3>
-            <p>Share this QR code with a friend to connect securely.</p>
+            <h3 data-i18n="add_key_title">Your Add Key</h3>
+            <p data-i18n="add_key_desc">Share this QR code with a friend to connect securely.</p>
             <div id="qrcode-container"></div>
             <p id="temp-key-display" class="key-text"></p>
-            <button class="close-modal">Close</button>
+            <button class="close-modal" data-i18n="close">Close</button>
         </div>
     </div>
 
     <!-- Add Friend Modal -->
     <div id="add-friend-modal" class="modal hidden">
         <div class="glass-card modal-content">
-            <h3>Add Friend</h3>
-            <input type="text" id="friend-username-input" placeholder="Friend's Username">
-            <input type="text" id="friend-key-input" placeholder="Temporary Key">
-            <button id="confirm-add-friend" class="primary-btn">Add Friend</button>
-            <button class="close-modal">Cancel</button>
+            <h3 data-i18n="add_friend">Add Friend</h3>
+            <input type="text" id="friend-username-input" data-i18n-placeholder="friend_username" placeholder="Friend's Username">
+            <input type="text" id="friend-key-input" data-i18n-placeholder="temp_key" placeholder="Temporary Key">
+            <button id="confirm-add-friend" class="primary-btn" data-i18n="confirm_add">Add Friend</button>
+            <button class="close-modal" data-i18n="cancel">Cancel</button>
         </div>
     </div>
 
