@@ -55,6 +55,31 @@ set PORT=4000 && npm start
 - **message_recalled**: Listen for `{ msgId }` to remove a message from the UI.
 - **error**: Listen for error messages.
 
+## Frontend (Aura Chat)
+
+A stunning minimalist frontend is located in the `/frontend` directory.
+
+### Setup Instructions
+
+1. **Navigate to Frontend**:
+   ```bash
+   cd frontend
+   ```
+2. **Serve the app**:
+   You can use any static server. For example, using `npx`:
+   ```bash
+   npx serve .
+   ```
+   Or simply open `index.html` in your browser.
+
+### Features
+- Glassmorphism UI
+- Real-time room switching
+- Image uploads
+- Message recall integration
+
+---
+
 ## Project Structure
 
 - `server.js`: Main entry point for the Express and Socket.io server.
