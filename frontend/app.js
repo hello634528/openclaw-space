@@ -1,4 +1,4 @@
-// Aura Chat V2 - Client Logic
+// Aura Chat V3 - Client Logic
 document.addEventListener('DOMContentLoaded', () => {
     // Internationalization (i18n)
     let currentLang = localStorage.getItem('aura-lang') || 'en';
@@ -80,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayName = document.getElementById('display-name');
     const userAvatar = document.getElementById('user-avatar');
     const friendsList = document.getElementById('friends-list');
+    const encryptionStatus = document.getElementById('encryption-status');
     
     // Modals
     const qrModal = document.getElementById('qr-modal');
@@ -87,14 +88,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrcodeContainer = document.getElementById('qrcode-container');
     const tempKeyDisplay = document.getElementById('temp-key-display');
     
+    // Image Preview Elements
+    const imageUpload = document.getElementById('image-upload');
+    const imagePreviewOverlay = document.getElementById('image-preview');
+    const previewImg = document.getElementById('preview-img');
+    const cancelImageBtn = document.getElementById('cancel-image');
+
     // State
     let socket = null;
-    let currentUser = null;
+    let currentUser = JSON.parse(localStorage.getItem('aura-user')) || null;
     let currentRoom = 'General';
     let currentDM = null;
     let friends = [];
-    let encryptionKeys = {}; // username -> CryptoKey
+    let token = localStorage.getItem('aura-token') || null;
     
+    // Check if already logged in
+    if (token && currentUser) {
+        initChat();
+    }
+
     // --- ENCRYPTION HELPERS ---
 
     async function deriveKey(sharedSecret) {
@@ -174,6 +186,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (data.success) {
                 currentUser = data.user;
+                token = data.token;
+                localStorage.setItem('aura-token', token);
+                localStorage.setItem('aura-user', JSON.stringify(currentUser));
                 initChat();
             } else {
                 showToast(data.error);
@@ -214,15 +229,40 @@ document.addEventListener('DOMContentLoaded', () => {
         displayName.textContent = currentUser.username;
         userAvatar.textContent = currentUser.username.charAt(0).toUpperCase();
 
-        socket = io(API_URL);
+        socket = io(API_URL, {
+            auth: { token }
+        });
         
         socket.on('connect', () => {
-            socket.emit('authenticate', { username: currentUser.username });
+            console.log('Connected to socket');
             socket.emit('join_room', currentRoom);
+            updateRoomDisplay();
+        });
+
+        socket.on('connect_error', (err) => {
+            if (err.message === 'Authentication error') {
+                localStorage.removeItem('aura-token');
+                localStorage.removeItem('aura-user');
+                window.location.reload();
+            }
         });
 
         socket.on('receive_message', async (data) => {
             await appendMessage(data);
+        });
+
+        socket.on('message_recalled', (msgId) => {
+            const msgEl = document.querySelector(`[data-id="${msgId}"]`);
+            if (msgEl) {
+                const textContent = msgEl.querySelector('.text-content');
+                if (textContent) textContent.textContent = t('message_recalled');
+                const bubbleContent = msgEl.querySelector('.bubble-content');
+                const img = bubbleContent.querySelector('.message-image');
+                if (img) img.remove();
+                const recallBtn = msgEl.querySelector('.recall-btn');
+                if (recallBtn) recallBtn.remove();
+                msgEl.classList.add('recalled');
+            }
         });
 
         socket.on('room_history', async (history) => {
@@ -258,9 +298,28 @@ document.addEventListener('DOMContentLoaded', () => {
     sendBtn.onclick = sendMessage;
     messageInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
 
+    // Image Upload Preview Logic
+    imageUpload.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                previewImg.src = event.target.result;
+                imagePreviewOverlay.classList.add('visible');
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    cancelImageBtn.onclick = () => {
+        imageUpload.value = '';
+        imagePreviewOverlay.classList.remove('visible');
+        previewImg.src = '';
+    };
+
     async function sendMessage() {
         const text = messageInput.value.trim();
-        const imageFile = document.getElementById('image-upload').files[0];
+        const imageFile = imageUpload.files[0];
         
         if (!text && !imageFile) return;
 
@@ -287,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.onload = () => {
                 messageData.image = reader.result;
                 socket.emit('send_message', messageData);
+                cancelImageBtn.click(); // Clear preview
             };
             reader.readAsDataURL(imageFile);
         } else {
@@ -295,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         messageInput.value = '';
         messageInput.focus();
-        document.getElementById('image-upload').value = '';
     }
 
     async function appendMessage(data) {
@@ -309,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let displayMessage = data.message;
-        if (isDM) {
+        if (isDM && !data.recalled) {
             try {
                 const payload = JSON.parse(data.message);
                 if (payload.cipher) {
@@ -324,7 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const msgEl = document.createElement('div');
-        msgEl.className = `message-group ${isSelf ? 'self' : 'other'}`;
+        msgEl.className = `message-group ${isSelf ? 'self' : 'other'} ${data.recalled ? 'recalled' : ''}`;
+        msgEl.dataset.id = data.id;
         const time = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
         msgEl.innerHTML = `
@@ -332,14 +392,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="sender-name">${data.sender}</span> • 
                 <span class="timestamp">${time}</span>
                 ${isDM ? '<span class="e2ee-tag" title="End-to-End Encrypted">🔒</span>' : ''}
+                ${isSelf && !data.recalled ? `<button class="recall-btn" title="${t('recall')}">🗑️</button>` : ''}
             </div>
             <div class="message-bubble">
                 <div class="bubble-content">
-                    ${data.image ? `<img src="${data.image}" class="message-image">` : ''}
+                    ${data.image && !data.recalled ? `<img src="${data.image}" class="message-image clickable-img">` : ''}
                     <div class="text-content">${escapeHTML(displayMessage)}</div>
                 </div>
             </div>
         `;
+
+        if (isSelf && !data.recalled) {
+            msgEl.querySelector('.recall-btn').onclick = () => {
+                if (confirm(t('confirm_recall') || 'Recall this message?')) {
+                    socket.emit('recall_message', data.id);
+                }
+            };
+        }
+
+        // Add click listener for image enlargement
+        const img = msgEl.querySelector('.clickable-img');
+        if (img) {
+            img.onclick = () => {
+                previewImg.src = img.src;
+                imagePreviewOverlay.classList.add('visible');
+                // Hide cancel button when just viewing
+                cancelImageBtn.style.display = 'none';
+                imagePreviewOverlay.onclick = () => {
+                    imagePreviewOverlay.classList.remove('visible');
+                    cancelImageBtn.style.display = 'block';
+                    imagePreviewOverlay.onclick = null;
+                };
+            };
+        }
 
         messagesContainer.appendChild(msgEl);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -352,8 +437,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentRoom) {
             const roomKey = currentRoom.toLowerCase();
             currentChatName.textContent = `# ${t(roomKey)}`;
+            encryptionStatus.style.display = 'none';
         } else if (currentDM) {
             currentChatName.textContent = `@ ${currentDM}`;
+            encryptionStatus.style.display = 'inline-flex';
         }
     }
 

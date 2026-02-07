@@ -1,6 +1,6 @@
 const translations = {
     en: {
-        title: "Aura Chat V2",
+        title: "Aura Chat V3",
         subtitle: "Secure & Private",
         login: "Login",
         register: "Register",
@@ -12,7 +12,7 @@ const translations = {
         have_account: "Already have an account?",
         rooms: "Rooms",
         friends: "Friends",
-        welcome_title: "Welcome to Aura Chat V2",
+        welcome_title: "Welcome to Aura Chat V3",
         welcome_desc: "Your messages are secured with AES encryption.",
         e2ee: "E2EE",
         type_message: "Type a message...",
@@ -29,17 +29,20 @@ const translations = {
         server_fail: "Server connection failed",
         reg_success: "Registration successful! Please login.",
         reg_fail: "Registration failed",
-        chat_with: "Chat with",
+        chat_with: "Chat with %s",
         e2ee_desc: "Messages are E2EE encrypted.",
         added_friend: "Added friend:",
         general: "general",
         lounge: "lounge",
         tech: "tech",
         upload_image: "Upload Image",
-        show_key: "Show My Add Key"
+        show_key: "Show My Add Key",
+        recall: "Recall",
+        message_recalled: "[Message Recalled]",
+        confirm_recall: "Recall this message?"
     },
     zh: {
-        title: "Aura Chat V2",
+        title: "Aura Chat V3",
         subtitle: "安全与隐私",
         login: "登录",
         register: "注册",
@@ -51,7 +54,7 @@ const translations = {
         have_account: "已有账号？",
         rooms: "聊天室",
         friends: "好友",
-        welcome_title: "欢迎来到 Aura Chat V2",
+        welcome_title: "欢迎来到 Aura Chat V3",
         welcome_desc: "您的消息已通过 AES 加密。",
         e2ee: "端到端加密",
         type_message: "输入消息...",
@@ -75,6 +78,9 @@ const translations = {
         lounge: "休息室",
         tech: "技术",
         upload_image: "上传图片",
-        show_key: "查看我的添加密钥"
+        show_key: "查看我的添加密钥",
+        recall: "撤回",
+        message_recalled: "[消息已撤回]",
+        confirm_recall: "确定撤回此消息吗？"
     }
 };

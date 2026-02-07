@@ -6,9 +6,11 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'aura-secret-key-v3';
 
 // Persistence Setup
 const DATA_DIR = path.join(__dirname, 'data');
@@ -17,6 +19,34 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
 const FRIENDS_FILE = path.join(DATA_DIR, 'friends.json');
+
+// Simple Atomic Write Queue
+const writeQueue = [];
+let isWriting = false;
+
+const processQueue = async () => {
+  if (isWriting || writeQueue.length === 0) return;
+  isWriting = true;
+  const { file, data, resolve, reject } = writeQueue.shift();
+  try {
+    const tempFile = `${file}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf8');
+    fs.renameSync(tempFile, file);
+    resolve();
+  } catch (e) {
+    reject(e);
+  } finally {
+    isWriting = false;
+    processQueue();
+  }
+};
+
+const saveData = (file, data) => {
+  return new Promise((resolve, reject) => {
+    writeQueue.push({ file, data, resolve, reject });
+    processQueue();
+  });
+};
 
 const loadData = (file, defaultValue = []) => {
   if (!fs.existsSync(file)) return defaultValue;
@@ -27,10 +57,6 @@ const loadData = (file, defaultValue = []) => {
   }
 };
 
-const saveData = (file, data) => {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
-};
-
 let users = loadData(USERS_FILE, {});
 let messages = loadData(MESSAGES_FILE, []);
 let friends = loadData(FRIENDS_FILE, {});
@@ -39,6 +65,7 @@ let friends = loadData(FRIENDS_FILE, {});
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.static(path.join(__dirname, 'frontend')));
 
 // Auth API
 app.post('/api/register', async (req, res) => {
@@ -47,14 +74,17 @@ app.post('/api/register', async (req, res) => {
   if (users[username]) return res.status(400).json({ error: 'User already exists' });
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  users[username] = {
+  const user = {
     username,
     password: hashedPassword,
     id: uuidv4(),
     createdAt: new Date().toISOString()
   };
-  saveData(USERS_FILE, users);
-  res.json({ success: true });
+  users[username] = user;
+  await saveData(USERS_FILE, users);
+  
+  const token = jwt.sign({ username: user.username, id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ success: true, token, user: { username: user.username, id: user.id } });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -63,7 +93,8 @@ app.post('/api/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.password))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  res.json({ success: true, user: { username: user.username, id: user.id } });
+  const token = jwt.sign({ username: user.username, id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ success: true, token, user: { username: user.username, id: user.id } });
 });
 
 const server = http.createServer(app);
@@ -72,42 +103,48 @@ const io = new Server(server, {
   maxHttpBufferSize: 1e8
 });
 
+// Socket auth middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) return next(new Error('Authentication error'));
+  
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return next(new Error('Authentication error'));
+    socket.user = decoded;
+    next();
+  });
+});
+
 // Socket logic
 const onlineUsers = new Map(); // username -> socketId
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  socket.on('authenticate', (data) => {
-    const { username } = data;
-    if (username) {
-      socket.username = username;
-      onlineUsers.set(username, socket.id);
-      console.log(`${username} authenticated`);
-      
-      // Send friend list
-      const userFriends = friends[username] || [];
-      socket.emit('friends_list', userFriends);
-      
-      // Notify friends they are online
-      userFriends.forEach(friend => {
-        const friendSocketId = onlineUsers.get(friend);
-        if (friendSocketId) {
-          io.to(friendSocketId).emit('friend_status', { username, status: 'online' });
-        }
-      });
+  const username = socket.user.username;
+  console.log('User connected:', username, socket.id);
+  
+  socket.username = username;
+  onlineUsers.set(username, socket.id);
+  
+  // Send friend list
+  const userFriends = friends[username] || [];
+  socket.emit('friends_list', userFriends);
+  
+  // Notify friends they are online
+  userFriends.forEach(friend => {
+    const friendSocketId = onlineUsers.get(friend);
+    if (friendSocketId) {
+      io.to(friendSocketId).emit('friend_status', { username, status: 'online' });
     }
   });
-
 
   socket.on('join_room', (room) => {
     socket.join(room);
     // Send room history
-    const history = messages.filter(m => m.room === room).slice(-50);
+    const history = messages.filter(m => m.room === room && !m.recalled).slice(-50);
     socket.emit('room_history', history);
   });
 
-  socket.on('send_message', (data) => {
+  socket.on('send_message', async (data) => {
     const { room, message, image, type, target } = data;
     const msgId = uuidv4();
     const timestamp = new Date().toISOString();
@@ -124,8 +161,8 @@ io.on('connection', (socket) => {
     };
 
     messages.push(messageData);
-    if (messages.length > 1000) messages.shift(); // Keep last 1000
-    saveData(MESSAGES_FILE, messages);
+    if (messages.length > 2000) messages.shift(); // Keep last 2000
+    await saveData(MESSAGES_FILE, messages);
 
     if (type === 'dm' && target) {
       const targetSocketId = onlineUsers.get(target);
@@ -138,16 +175,38 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('add_friend', (data) => {
+  socket.on('recall_message', async (msgId) => {
+    const msgIndex = messages.findIndex(m => m.id === msgId);
+    if (msgIndex !== -1) {
+      const msg = messages[msgIndex];
+      if (msg.sender === socket.username) {
+        msg.recalled = true;
+        msg.message = '[Message Recalled]';
+        msg.image = null;
+        await saveData(MESSAGES_FILE, messages);
+        
+        if (msg.type === 'dm') {
+          const targetSocketId = onlineUsers.get(msg.target);
+          if (targetSocketId) io.to(targetSocketId).emit('message_recalled', msgId);
+          socket.emit('message_recalled', msgId);
+        } else {
+          io.to(msg.room).emit('message_recalled', msgId);
+        }
+      }
+    }
+  });
+
+  socket.on('add_friend', async (data) => {
     const { from, to, tempKey } = data;
-    // Simple auto-accept for this implementation or just store request
+    if (from !== socket.username) return;
+
     if (!friends[from]) friends[from] = [];
     if (!friends[to]) friends[to] = [];
     
     if (!friends[from].includes(to)) friends[from].push(to);
     if (!friends[to].includes(from)) friends[to].push(from);
     
-    saveData(FRIENDS_FILE, friends);
+    await saveData(FRIENDS_FILE, friends);
     
     const targetSocketId = onlineUsers.get(to);
     if (targetSocketId) {

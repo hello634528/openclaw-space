@@ -1,20 +1,21 @@
-# Aura Chat V2 - Secure & Private Messaging
+# Aura Chat V3 - Secure & Private Messaging
 
 A minimal, secure messaging system built with Node.js, Express, and Socket.io. Optimized for Windows and local environments.
 
-## V2 New Features
+## V3 Enhancements
 
-1.  **Auth & Security**:
-    *   **Secure Login**: Password hashing with `bcryptjs`.
+1.  **Security Enhancement (JWT)**:
+    *   **JWT Auth**: Secure authentication using JSON Web Tokens. Token-based access for both REST API and Socket.io connections.
+2.  **Encryption & Transparency**:
     *   **End-to-End Encryption (E2EE)**: Direct Messages (DM) are encrypted using AES-GCM (256-bit). Only the intended recipient can decrypt the message.
-2.  **Persistence**:
-    *   All chat history, users, and social data are stored in local JSON files (`data/*.json`), ensuring persistence without a complex database setup.
-3.  **Communication Modes**:
-    *   **Group Rooms**: Public channels for community chat.
-    *   **Direct Messaging (DM)**: Private, encrypted 1-on-1 conversations.
-4.  **Social Features**:
-    *   **Friend System**: Add friends using "Temporary Keys" and "QR Codes".
-    *   **QR Code Support**: Generate and scan QR codes for secure friend adding.
+    *   **Transparency Note**: While DM content is E2EE, **metadata (who chatted with whom and when) is visible to the server** for routing and history management.
+3.  **Advanced Logic**:
+    *   **Message Recall**: Users can recall their messages from both DM and public rooms.
+    *   **E2EE Indicator**: Clear visual feedback when a conversation is secured.
+    *   **Improved Image Handling**: High-quality image sharing with instant preview.
+4.  **Engineering & DX**:
+    *   **Atomic Write Persistence**: Uses a safe write-and-rename pattern to prevent JSON data corruption during concurrent writes.
+    *   **Direct Serving**: The server serves the frontend directly at the root for a unified experience.
 5.  **Modern UI**:
     *   **Glassmorphism Style**: A sleek, premium design with blur effects and vibrant gradients.
     *   **Responsive**: Works on desktop and mobile browsers.
@@ -32,7 +33,7 @@ npm start
 ```
 
 ### 3. Access Application
-Open `http://localhost:3000` (or your configured port).
+Open `http://localhost:3000`.
 
 ## Deployment (Windows)
 
