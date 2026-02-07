@@ -1,5 +1,7 @@
 # Aura Chat V3 - Secure & Private Messaging
 
+[**阅读中文版 README (Chinese version)**](./README_CN.md)
+
 A minimal, secure messaging system built with Node.js, Express, and Socket.io. Optimized for Windows and local environments.
 
 ## V3 Enhancements
